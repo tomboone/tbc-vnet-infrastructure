@@ -1,0 +1,13 @@
+version: 2
+updates:
+  - package-ecosystem: "terraform"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "09:00"
+      timezone: "America/New_York"
+    target-branch: "feature/dependency-updates"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
