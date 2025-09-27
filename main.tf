@@ -17,56 +17,56 @@ resource "azurerm_virtual_network" "main" {
   location            = azurerm_resource_group.main.location
   name                = local.vnet_name
   resource_group_name = azurerm_resource_group.main.name
+}
 
-  subnet {
-    name = "IntegrationSubnet"
-    address_prefixes = ["10.0.1.0/28"]
-  }
+resource "azurerm_subnet" "integration" {
+  address_prefixes     = [ "10.0.1.0/28",]
+  name                 = "IntegrationSubnet"
+  resource_group_name  = "tbc-vnet-rg"
+  virtual_network_name = "tbc-vnet"
 
-  subnet {
-    name = "PrivateEndpointsSubnet"
-    address_prefixes = ["10.0.2.0/24"]
-  }
+  delegation {
+    name = "app-service-delegation"
 
-  subnet {
-    name = "GatewaySubnet"
-    address_prefixes = ["10.0.3.0/27"]
+    service_delegation {
+      actions = ["Microsoft.Network/virtualNetworks/subnets/action",]
+      name    = "Microsoft.Web/serverFarms"
+    }
   }
 }
 
-# Public IP for VPN Gateway
-resource "azurerm_public_ip" "vpn_gateway" {
-  name                = "${local.vnet_name}-vpn-gateway-ip"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-  allocation_method   = "Static"
-  sku                 = "Standard"
+resource "azurerm_subnet" "private_endpoints" {
+  address_prefixes                              = ["10.0.2.0/24",]
+  name                                          = "PrivateEndpointsSubnet"
+  resource_group_name                           = "tbc-vnet-rg"
+  virtual_network_name                          = "tbc-vnet"
 }
 
-# VPN Gateway
-resource "azurerm_virtual_network_gateway" "vpn" {
-  name                = "${local.vnet_name}-vpn-gateway"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+resource "azurerm_network_security_group" "private_endpoints" {
+  name                = "tbc-vnet-pe-nsg"
+  resource_group_name = "tbc-vnet-rg"
+  location            = "eastus2"
 
-  type     = "Vpn"
-  vpn_type = "RouteBased"
-  sku      = "VpnGw1"
-
-  ip_configuration {
-    name                          = "vnetGatewayConfig"
-    public_ip_address_id          = azurerm_public_ip.vpn_gateway.id
-    private_ip_address_allocation = "Dynamic"
-    subnet_id                     = "${azurerm_virtual_network.main.id}/subnets/GatewaySubnet"
+  security_rule {
+    access                                     = "Allow"
+    destination_address_prefix                 = "10.0.2.0/24"
+    destination_address_prefixes               = []
+    destination_application_security_group_ids = []
+    destination_port_range                     = "*"
+    destination_port_ranges                    = []
+    direction                                  = "Inbound"
+    name                                       = "AllowIntegrationToPrivateEndpoints"
+    priority                                   = 110
+    protocol                                   = "*"
+    source_address_prefix                      = "10.0.1.0/28"
+    source_address_prefixes                    = []
+    source_application_security_group_ids      = []
+    source_port_range                          = "*"
+    source_port_ranges                         = []
   }
+}
 
-  vpn_client_configuration {
-    address_space = ["172.16.0.0/24"]
-
-    vpn_client_protocols = ["OpenVPN"]
-
-    aad_tenant   = "https://login.microsoftonline.com/${data.azurerm_client_config.current.tenant_id}/"
-    aad_audience = "41b23e61-6c1e-4545-b367-cd054e0ed4b4"  # Azure VPN Client ID
-    aad_issuer   = "https://sts.windows.net/${data.azurerm_client_config.current.tenant_id}/"
-  }
+resource "azurerm_subnet_network_security_group_association" "private_endpoints" {
+  network_security_group_id = azurerm_network_security_group.private_endpoints.id
+  subnet_id                 = azurerm_subnet.private_endpoints.id
 }
